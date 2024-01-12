@@ -6,18 +6,19 @@
 #define SEND_DATA  3
 #define COLLECTEUR_ID 1
 #define SIZE_OF_TRAM 5
+#define MAX_NODES 10
 
 int nextID = 1;
+int assignedIDs[MAX_NODES] = {0};
 volatile int sendingTram[SIZE_OF_TRAM];
 volatile int receivedTram[SIZE_OF_TRAM];
 
-// Structure de données pour stocker les relations entre emetteurID et assignedID
-struct IdMapping {
-  int emetteurID;
-  int assignedID;
-};
-
-IdMapping idMappings[SIZE_OF_TRAM];
+int assignID(int emetteurID) {
+  if (assignedIDs[emetteurID] == 0) {
+    assignedIDs[emetteurID] = nextID++;
+  }
+  return assignedIDs[emetteurID];
+}
 
 int sendTram(int *tram) {
   int i = 0;
@@ -28,27 +29,6 @@ int sendTram(int *tram) {
   }
   LoRa.endPacket();
   return 1;
-}
-
-int assignID(int emetteurID) {
-  for (int i = 0; i < SIZE_OF_TRAM; i++) {
-    if (idMappings[i].emetteurID == emetteurID) {
-      // L'ID a déjà été attribué, renvoyer l'ID existant
-      return idMappings[i].assignedID;
-    }
-  }
-
-  // L'ID n'a pas encore été attribué, attribuer un nouvel ID
-  for (int i = 0; i < SIZE_OF_TRAM; i++) {
-    if (idMappings[i].emetteurID == 0) {
-      idMappings[i].emetteurID = emetteurID;
-      idMappings[i].assignedID = nextID++;
-      return idMappings[i].assignedID;
-    }
-  }
-
-  // Gérer le dépassement de la taille de idMappings si nécessaire
-  return 0;
 }
 
 int handleDemandID() {
@@ -63,8 +43,8 @@ int handleDemandID() {
   Serial.println("----------------------------------------- ");
   Serial.println("");
 
-  sendingTram[0] = assignedID;
-  sendingTram[1] = 0xFF;
+  sendingTram[0] = COLLECTEUR_ID; // Correction : il faut envoyer l'ID du collecteur
+  sendingTram[1] = assignedID; // Correction : il faut envoyer l'ID attribué à l'émetteur
   sendingTram[2] = 0xFF;
   sendTram(sendingTram);
   return 1;
@@ -87,9 +67,8 @@ int handleSendData() {
   Serial.println("------------------------------------");
   Serial.println();
   int emetteurID = receivedTram[1];
-  int assignedID = assignID(emetteurID);
   Serial.print("ID du l'émetteur : ");
-  Serial.println(assignedID);
+  Serial.println(assignedIDs[emetteurID]);
   Serial.print("Temperature : ");
   Serial.println(receivedTram[3]);
   Serial.print("Humidité : ");
@@ -105,11 +84,16 @@ int handleSendData() {
 void setup() {
   Serial.begin(9600);
   while (!Serial);
-  Serial.println("############### ");
+  Serial.println("################ ");
   Serial.println("Collecteur LoRa");
-  Serial.println("###############");
+  Serial.println("################");
   Serial.println(" ");
   Serial.println(" ");
+
+  // Initialiser le tableau des identifiants à 0
+  for (int i = 0; i < MAX_NODES; i++) {
+    assignedIDs[i] = 0;
+  }
 
   if (!LoRa.begin(863.7E6)) {
     Serial.println("Démarrage de LoRa échoué !");
@@ -128,25 +112,23 @@ void loop() {
       int emetteurID = receivedTram[1];
 
       if (tramType == DEMAND_ID && (int)receivedTram[2] == 1) {
-        // Vérifier si ID est attribué
-        int assignedID = assignID(emetteurID);
-        if (assignedID == 0) {
+        // Check if ID is assigned
+        if (assignedIDs[emetteurID] == 0) {
           Serial.println("Attendez l'attribution de l'ID.");
-          return; // Arrêter le traitement de la tram
+          return; // Stop processing the tram
         }
         handleDemandID();
       } else if (tramType == OUT_OF_NET && (int)receivedTram[2] == 1) {
         handleNodeDisconnected();
       } else if (tramType == SEND_DATA && (int)receivedTram[2] == 1) {
-        // Vérifier si ID est attribué
-        int assignedID = assignID(emetteurID);
-        if (assignedID == 0) {
+        // Check if ID is assigned
+        if (assignedIDs[emetteurID] == 0) {
           Serial.println("Attendez l'attribution de l'ID.");
-          return; // Arrêter le traitement de la tram
+          return; // Stop processing the tram
         }
         handleSendData();
       } else {
-        // Gérer d'autres cas ou ignorer les trams non reconnues
+        // Handle other cases or ignore unrecognized trams
       }
     }
   }
