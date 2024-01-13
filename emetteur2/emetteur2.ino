@@ -5,7 +5,7 @@
 #define OUT_OF_NET 2
 #define SEND_DATA  3
 #define COLLECTEUR_ID 1
-#define EMETTEUR_ID 1
+#define EMETTEUR_ID 4
 
 #define SIZE_OF_TRAM 6
 
@@ -34,8 +34,7 @@ int sendTram(int *tram) {
 int demandID() {
   sendingTram[0] = DEMAND_ID;
   sendingTram[1] = emetteurID;
-  sendingTram[2] = 0xFF; // Correction : il faut envoyer 0xFF à la place du collecteurID
-
+  sendingTram[2] = collecteurID;
   sendingTram[3] = 0xFF;
   sendingTram[4] = 0xFF;
   sendingTram[5] = 0xFF;
@@ -102,10 +101,23 @@ void loop() {
       }
     }
   }
-  // Correction : il faut ajouter une condition pour envoyer les données après avoir reçu l'ID
-  if (emetteurID != 0) {
+
+  // Envoyer les données seulement si nous n'avons pas atteint la limite
+  if (dataSent < 10) {
     generateRandomData();
     sendData();
-    delay(1000); // Attendre une seconde avant de renvoyer les données
+    dataSent++;
+    delay(2000);
+  }
+
+  // Une fois que nous avons envoyé 10 fois, simuler une déconnexion du noeud
+  if (dataSent == 10) {
+    outOfNet();
+    Serial.print("Emetteur déconnecté et va se reconnecter dans 10 secondes ");
+    delay(10000);
+
+    // Réinitialiser la variable et se reconnecter au collecteur
+    dataSent = 0;
+    demandID();
   }
 }
